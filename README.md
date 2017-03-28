@@ -1,7 +1,7 @@
 ### tlang
 #### Language Project - CSCI 4900
 
-  Requires LLVM
+  Requires [LLVM](https://www.llvm.org)
   
 On Ubuntu:
 ```bash
