@@ -3,6 +3,15 @@
 
   Requires LLVM
   
+On Ubuntu:
+```bash
+sudo apt-get install llvm
+```
+On Arch:
+```bash
+sudo pacman -S llvm
+```
+  
   To compile:
   
 ```bash
