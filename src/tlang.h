@@ -1,8 +1,9 @@
+
 // Charles Timmerman - cttimm4427@ung.edu
+
 #ifndef TLANG_H
 #define TLANG_H
 
-// LLVM headers
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/IRBuilder.h"
@@ -25,24 +26,9 @@
 #include <map>
 
 
-//                  //
-// -- Token Defs -- //
-//                  //
 
-enum Token {
-    _EOF = -1,
-    _FN = -2,
-    _IMPORT = -3,
-    _IDENT = -4,
-    _NUMBER = -5,
-    _EXIT = -6
-};
+// --- Node Prototypes --- 
 
-//                 //
-// -- Prototype -- //
-//                 //
-
-// AST Prototypes
 class Expression;
 class NumExpression;
 class VarExpression;
@@ -50,58 +36,34 @@ class OpExpression;
 class CallExpression;
 class ProtoFn;
 class FnExpression;
-
-static double NumVal;
-static int currToken;
-static std::string IdentStr;
 static std::map<char, int> binopPrec; // Map for binary op precedence
 
-// Lexer functions
-static int get_token();
-static int get_next_token();
-static int get_token_precedence();
+// ---  Code Generation --- 
 
-// Error functions 
-std::unique_ptr<Expression> log_error();
-std::unique_ptr<ProtoFn> log_errorp();
-
-// Parser functions
-static std::unique_ptr<Expression> parse_expression();
-static std::unique_ptr<Expression> parse_numexpr();
-static std::unique_ptr<Expression> parse_paren();
-static std::unique_ptr<Expression> parse_idexp();
-static std::unique_ptr<Expression> parse_primary();
-static std::unique_ptr<Expression> parse_rbinop();
-static std::unique_ptr<Expression> parse_expression();
-static std::unique_ptr<ProtoFn> parse_prototype();
-static std::unique_ptr<FnExpression> parse_definition();
-static std::unique_ptr<ProtoFn> parse_import();
-static std::unique_ptr<FnExpression> parse_top_expr();
-
-// Top-level parsing
-static void handle_definition();
-static void handle_import();
-static void handle_top();
-
-// llvm
 static llvm::LLVMContext CONTEXT;
 static llvm::IRBuilder<> BUILDER(CONTEXT);
 static std::unique_ptr<llvm::Module> MODULE;
 static std::map<std::string, llvm::Value *> NamedValues;
 llvm::Value *log_errorv(const char *Str);
 
+// --- Error functions ---
+
+std::unique_ptr<Expression> log_error();
+std::unique_ptr<ProtoFn> log_errorp();
+
+
+
+
 //                            //
-// -- Abstract Syntax Tree -- //
+// --   Parse Tree Nodes   -- //
 //                            //
 
-// AST Base Node
 class Expression {
     public:
         virtual ~Expression() {}
         virtual llvm::Value *codegen() = 0;
 };
 
-// AST Node for numerical expressions
 class NumExpression : public Expression {
     double Val;
 public:
@@ -109,7 +71,6 @@ public:
     virtual llvm::Value *codegen();
 };
 
-// AST Node for variables
 class VarExpression : public Expression {
     std::string Name;
 public:
@@ -117,7 +78,6 @@ public:
     llvm::Value *codegen() override;
 };
 
-// AST Node for operators
 class OpExpression : public Expression {
     char Op;
     std::unique_ptr<Expression> leftSide, rightSide;
@@ -128,7 +88,6 @@ public:
     llvm::Value *codegen() override;
 };
 
-// AST Node for fn calls
 class CallExpression : public Expression {
     std::string Callee;
     std::vector<std::unique_ptr<Expression>> Args;
@@ -139,7 +98,6 @@ public:
     llvm::Value *codegen() override;
 };
 
-// AST Node for prototype functions
 class ProtoFn {
     std::string Name;
     std::vector<std::string> Args;
@@ -151,7 +109,6 @@ public:
 
 };
 
-// AST Node for function body
 class FnExpression{
     std::unique_ptr<ProtoFn> Proto;
     std::unique_ptr<Expression> Body;
@@ -163,5 +120,110 @@ public:
     llvm::Function *codegen();
 
 };
+// -- End Nodes
 
+
+// Error handling functions
+std::unique_ptr<Expression> log_error(const char *Str) {
+    fprintf(stderr, "log_error: %s\n", Str);
+    return nullptr;
+}
+std::unique_ptr<ProtoFn> log_errorp(const char *Str) {
+    log_error(Str);
+    return nullptr;
+}
+
+
+
+//                        //
+// --- Code Generator --- //
+//                        //
+
+// These all override the codegen routine from the parse tree node_destruct
+
+llvm::Value *log_errorv(const char *Str) {
+    log_error(Str);
+    return nullptr;
+}
+
+llvm::Value *NumExpression::codegen() {
+    return llvm::ConstantFP::get(CONTEXT, llvm::APFloat(Val));
+}
+
+llvm::Value *VarExpression::codegen() {
+    llvm::Value *V = NamedValues[Name];
+    if(!V)
+        log_errorv("Unknow variable name.");
+    return V;
+}
+
+llvm::Value *OpExpression::codegen() {
+    llvm::Value *L = leftSide->codegen();
+    llvm::Value *R = rightSide->codegen();
+    if(!L || !R) return nullptr;
+    switch(Op) {
+        case '+':
+            return BUILDER.CreateFAdd(L, R, "addop");
+        case '-':
+            return BUILDER.CreateFSub(L, R, "subop");
+        case '*':
+            return BUILDER.CreateFMul(L, R, "mulop");
+        case '<':
+            L = BUILDER.CreateFCmpULT(L, R, "cmpop");
+            return BUILDER.CreateUIToFP(L, llvm::Type::getDoubleTy(CONTEXT), "booltmp");
+        default:
+            return log_errorv("Invalid binary operator.");
+    }
+}
+
+llvm::Value *CallExpression::codegen() {
+    llvm::Function *callee = MODULE->getFunction(Callee);
+    if(!callee) return log_errorv("Unknown function referenced.");
+
+    if(callee->arg_size() != Args.size()) return log_errorv("Incorrect number of arguments.");
+
+    std::vector<llvm::Value *> args;
+    for(unsigned i = 0, e = Args.size(); i != e; i++) {
+        args.push_back(Args[i]->codegen());
+        if(!args.back()) return nullptr;
+    }
+    return BUILDER.CreateCall(callee, args, "retval");
+}
+
+llvm::Function *ProtoFn::codegen() {
+    std::vector<llvm::Type *> Doubles(Args.size(), llvm::Type::getDoubleTy(CONTEXT));
+    llvm::FunctionType *FT = llvm::FunctionType::get(llvm::Type::getDoubleTy(CONTEXT), Doubles, false);
+    llvm::Function *F = llvm::Function::Create(FT, llvm::Function::ExternalLinkage, Name, MODULE.get());
+
+    unsigned Idx = 0;
+    for (auto &Arg : F->args()) Arg.setName(Args[Idx++]);
+    return F;
+}
+
+llvm::Function *FnExpression::codegen() {
+    llvm::Function *function = MODULE->getFunction(Proto->getName());
+
+    if(!function) function = Proto->codegen();
+
+    if(!function) return nullptr;
+
+    llvm::BasicBlock *BB = llvm::BasicBlock::Create(CONTEXT, "entry", function);
+    BUILDER.SetInsertPoint(BB);
+
+    NamedValues.clear();
+    for(auto &Arg : function->args())
+        NamedValues[Arg.getName()] = &Arg;
+
+    if (llvm::Value *retval = Body->codegen()) {
+        BUILDER.CreateRet(retval);
+
+        llvm::verifyFunction(*function);
+
+        return function;
+    }
+
+    function->eraseFromParent();
+    return nullptr;
+}
+// End code gen
 #endif
