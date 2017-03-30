@@ -107,19 +107,6 @@ static int get_token() {
 //                //
 // --- Parser --- //
 //                //
-// BNF
-/*
-<statement> ::= <function> | <expression>
-<function>  ::= fn <identifier>(<args>)
-<args>      ::= <expression> | <primary>*
-<primary>::= <identifier> | <number> | <operation> | (<expression>)
-<operation> ::= <expression><op><expression>
-<op>        ::= + | - | * 
-
-working on implementing comparisons and assignments and adding operator 
-
-*/
-
 
 // HELPER FUNCTION -- look ahead 
 static int get_next_token() {

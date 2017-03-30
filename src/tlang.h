@@ -28,6 +28,18 @@
 
 
 // --- Node Prototypes --- 
+/*
+<Program>       ::= <Statement>*
+<Statement>     ::= <FnExpression> | <Expression>
+<Expression>    ::= <NumExpression> | <VarExpression> | <CallExpression> | <OpExpression>
+<FnExpression>  ::= fn <ProtoFn><Expression>
+<ProtoFn>       ::= <Identifier><Args>
+<Args>          ::= (<Expression>) | (<Expression>*)
+<OpExpression>  ::= <Expression><Op><Expression>
+<VarExpression> ::= <Identifier>
+<CallExpression>::= <ProtoFn>
+<NumExpression> ::= <Number>
+*/
 
 class Expression;
 class NumExpression;
