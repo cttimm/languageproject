@@ -18,7 +18,9 @@ enum Token {
     _IMPORT = -3,
     _IDENT = -4,
     _NUMBER = -5,
-    _EXIT = -6
+    _EXIT = -6,
+    _EQ = -7,
+    _ASSIGN = -8
 };
 
 // --- Lexer functions --- 
@@ -115,11 +117,26 @@ static int get_next_token() {
 // HELPER FUNCTION -- gets token precedence
 static int get_token_precedence() {
     // isascii can be used because the values of our tokens are negative integers and ascii is 0-255
-    if(!isascii(currToken)) return -1;
 
-    int token_precedence = binopPrec[currToken];
-    if(token_precedence <= 0) return -1;
-    return token_precedence;
+    switch(currToken) {
+        case '=':
+            return 10;
+        case '>':
+            return 10;
+        case '<':
+            return 10;
+        case '+':
+            return 20;
+        case '-':
+            return 20;
+        case '*':
+            return 40;
+        case '/':
+            return 40;
+        default:
+            return -1;
+
+    }
 }
 
 
@@ -166,9 +183,11 @@ static std::unique_ptr<Expression> parse_idexp() {
 
 // <primary>
 static std::unique_ptr<Expression> parse_primary() {
+
     // Use switch to guide parsing
     switch (currToken) {
         default:
+            printf("%c\n", currToken);
             return log_error("unknown token");
         case _IDENT:
             return parse_idexp();

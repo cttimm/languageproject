@@ -48,7 +48,7 @@ class OpExpression;
 class CallExpression;
 class ProtoFn;
 class FnExpression;
-static std::map<char, int> binopPrec; // Map for binary op precedence
+
 
 // ---  Code Generation --- 
 
@@ -165,7 +165,7 @@ llvm::Value *NumExpression::codegen() {
 llvm::Value *VarExpression::codegen() {
     llvm::Value *V = NamedValues[Name];
     if(!V)
-        log_errorv("Unknow variable name.");
+        log_errorv("Unknown variable name.");
     return V;
 }
 
@@ -174,15 +174,24 @@ llvm::Value *OpExpression::codegen() {
     llvm::Value *R = rightSide->codegen();
     if(!L || !R) return nullptr;
     switch(Op) {
+        // Switch to generate opcode for IR
         case '+':
-            return BUILDER.CreateFAdd(L, R, "addop");
+            return BUILDER.CreateFAdd(L, R, "ADDOP");
         case '-':
-            return BUILDER.CreateFSub(L, R, "subop");
+            return BUILDER.CreateFSub(L, R, "SUBOP");
         case '*':
-            return BUILDER.CreateFMul(L, R, "mulop");
+            return BUILDER.CreateFMul(L, R, "MULOP");
+        case '/':
+            return BUILDER.CreateFDiv(L, R, "DIVOP");
         case '<':
-            L = BUILDER.CreateFCmpULT(L, R, "cmpop");
-            return BUILDER.CreateUIToFP(L, llvm::Type::getDoubleTy(CONTEXT), "booltmp");
+            L = BUILDER.CreateFCmpULT(L, R, "CMPLT");
+            return BUILDER.CreateUIToFP(L, llvm::Type::getDoubleTy(CONTEXT), "BOOLTMP");
+        case '>':
+            L = BUILDER.CreateFCmpUGT(L, R, "CMPGT");
+            return BUILDER.CreateUIToFP(L, llvm::Type::getDoubleTy(CONTEXT), "BOOLTMP");
+        case '=':
+            L = BUILDER.CreateFCmpUEQ(L, R, "CMPEQ");
+            return BUILDER.CreateUIToFP(L, llvm::Type::getDoubleTy(CONTEXT), "BOOLTMP");
         default:
             return log_errorv("Invalid binary operator.");
     }

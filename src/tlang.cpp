@@ -32,10 +32,6 @@ static void MainLoop() {
 
 
 int main() {
-    binopPrec['<'] = 10;
-    binopPrec['+'] = 20;
-    binopPrec['-'] = 20;
-    binopPrec['*'] = 40;
 
     fprintf(stderr, "tlang > ");
     get_next_token();
