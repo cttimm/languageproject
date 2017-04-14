@@ -274,7 +274,7 @@ static std::unique_ptr<ProtoFn> parse_import() {
 
 static std::unique_ptr<FnExpression> parse_top_expr() {
     if (auto E = parse_expression()) {
-        auto Proto = llvm::make_unique<ProtoFn>("",std::vector<std::string>());
+        auto Proto = llvm::make_unique<ProtoFn>("__anonexpr",std::vector<std::string>());
         return llvm::make_unique<FnExpression>(std::move(Proto), std::move(E));
     }
     return nullptr;
@@ -306,17 +306,23 @@ static void handle_import() {
 
 static void handle_top() {
     if(auto FnExpr = parse_top_expr()) {
-        if(auto *FnIR = FnExpr->codegen()) {
-            fprintf(stderr, "Parsed a top-level expression\n");
-            FnIR->print(llvm::errs());
-            fprintf(stderr, "\n");
-        }
+        if(FnExpr->codegen()) {
+            auto H = jit->addModule(std::move(MODULE));
+	    initialize_module();
+	    
+
+	    auto expr_symbol = jit->findSymbol("__anonexpr");
+	    assert(expr_symbol && "Function not found.");
+	    double (*fp)() = (double (*)())(intptr_t)expr_symbol.getAddress();
+            fprintf(stderr, "Evaluated to %f\n", fp());
+
+	    jit->removeModule(H);
+       	}
         
     } else {
-        get_next_token();
-    }
+	get_next_token();    
 }
-
+}
 static void handle_return() {
     get_next_token();
 }

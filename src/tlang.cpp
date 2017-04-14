@@ -32,12 +32,21 @@ static void MainLoop() {
 
 
 int main() {
+    
 
+    LLVMInitializeNativeTarget();
+    LLVMInitializeNativeAsmPrinter();
+    LLVMInitializeNativeAsmParser();
+
+    // Preparing shell and parser
     fprintf(stderr, "tlang > ");
     get_next_token();
+    
 
-    // Memory allocation
-    MODULE = llvm::make_unique<llvm::Module>("tlang JIT", CONTEXT);
+    // Memory allocation and initialization
+    
+    jit = llvm::make_unique<llvm::orc::KaleidoscopeJIT>();
+    initialize_module();
     MainLoop();
     // Dumps all messages upon closing with CTRL-D
     MODULE->print(llvm::errs(), nullptr);

@@ -15,7 +15,10 @@
 #include "llvm/IR/Verifier.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Function.h"
-
+#include "llvm/IR/LegacyPassManager.h"
+#include "llvm/Transforms/Scalar.h"
+#include "llvm/Transforms/Scalar/GVN.h"
+#include "jit.h"
 #include <algorithm>
 #include <cstdio>
 #include <cctype>
@@ -54,10 +57,12 @@ class FnExpression;
 
 static llvm::LLVMContext CONTEXT;
 static llvm::IRBuilder<> BUILDER(CONTEXT);
+static std::unique_ptr<llvm::legacy::FunctionPassManager> FPM;
 static std::unique_ptr<llvm::Module> MODULE;
 static std::map<std::string, llvm::Value *> NamedValues;
 llvm::Value *log_errorv(const char *Str);
-
+static std::unique_ptr<llvm::orc::KaleidoscopeJIT> jit;
+static std::map<std::string, std::unique_ptr<ProtoFn>> function_protos;
 // --- Error functions ---
 
 std::unique_ptr<Expression> log_error();
@@ -153,6 +158,16 @@ std::unique_ptr<ProtoFn> log_errorp(const char *Str) {
 
 // These all override the codegen routine from the parse tree node_destruct
 
+
+llvm::Function *getFunction(std::string Name) {
+	if (auto *F = MODULE->getFunction(Name)) return F;
+
+	auto FI = function_protos.find(Name);
+	if (FI !=function_protos.end()) return FI->second->codegen();
+
+	return nullptr;
+}
+
 llvm::Value *log_errorv(const char *Str) {
     log_error(Str);
     return nullptr;
@@ -198,7 +213,7 @@ llvm::Value *OpExpression::codegen() {
 }
 
 llvm::Value *CallExpression::codegen() {
-    llvm::Function *callee = MODULE->getFunction(Callee);
+    llvm::Function *callee = getFunction(Callee); 
     if(!callee) return log_errorv("Unknown function referenced.");
 
     if(callee->arg_size() != Args.size()) return log_errorv("Incorrect number of arguments.");
@@ -222,10 +237,12 @@ llvm::Function *ProtoFn::codegen() {
 }
 
 llvm::Function *FnExpression::codegen() {
-    llvm::Function *function = MODULE->getFunction(Proto->getName());
+ ;
 
-    if(!function) function = Proto->codegen();
-
+    auto &P = *Proto;
+    function_protos[Proto->getName()] = std::move(Proto);
+    llvm::Function *function = getFunction(P.getName());
+    
     if(!function) return nullptr;
 
     llvm::BasicBlock *BB = llvm::BasicBlock::Create(CONTEXT, "entry", function);
@@ -240,6 +257,8 @@ llvm::Function *FnExpression::codegen() {
 
         llvm::verifyFunction(*function);
 
+	FPM->run(*function);
+
         return function;
     }
 
@@ -247,4 +266,19 @@ llvm::Function *FnExpression::codegen() {
     return nullptr;
 }
 // End code gen
+
+//			//
+// --- Optimization --- //
+//			//
+
+void initialize_module(void) {
+	MODULE = llvm::make_unique<llvm::Module>("JIT", CONTEXT); // Get Module Context
+	MODULE->setDataLayout(jit->getTargetMachine().createDataLayout()); // Set data layout for JIT
+	FPM = llvm::make_unique<llvm::legacy::FunctionPassManager>(MODULE.get()); // start FPM
+	FPM->add(llvm::createInstructionCombiningPass()); // Instruction combining
+	FPM->add(llvm::createReassociatePass()); // Rearrange commutative expressions
+	FPM->add(llvm::createGVNPass()); // 
+	FPM->add(llvm::createCFGSimplificationPass()); // Dead code checking
+	FPM->doInitialization();
+}
 #endif
