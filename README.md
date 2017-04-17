@@ -3,14 +3,11 @@
 
   Requires [LLVM](https://www.llvm.org)
   
-On Ubuntu:
+  *Requires the latest version of llvm, which had to be compiled manually
+  
 ```bash
-sudo apt-get install llvm
-```
-On Arch:
-```bash
-sudo pacman -S llvm
-```
+git clone http://www.github.com/llvm-mirror/llvm
+``
   
   To compile:
   
