@@ -14,3 +14,5 @@ git clone http://www.github.com/llvm-mirror/llvm
 ```bash
 clang++ -g tlang.cpp `llvm-config --cxxflags --ldflags --system-libs --libs core` -o tlang
 ```
+
+
