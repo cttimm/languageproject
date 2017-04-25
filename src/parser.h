@@ -12,6 +12,7 @@ static double NumVal;
 static int currToken;
 static std::string IdentStr;
 
+// --- Tokens ---
 enum Token {
     _EOF = -1,
     _FN = -2,
@@ -20,7 +21,13 @@ enum Token {
     _NUMBER = -5,
     _EXIT = -6,
     _EQ = -7,
-    _ASSIGN = -8
+    _ASSIGN = -8,
+    _IF = -9,
+    _ELSE = -10,
+    _ELIF = -11,
+    _FOR = -12, 
+    _OPEN = -13, // {
+    _CLOSE = -14 // }
 };
 
 // --- Lexer functions --- 
@@ -42,6 +49,7 @@ static std::unique_ptr<ProtoFn> parse_prototype();
 static std::unique_ptr<FnExpression> parse_definition();
 static std::unique_ptr<ProtoFn> parse_import();
 static std::unique_ptr<FnExpression> parse_top_expr();
+static std::unique_ptr<Expression> parse_if();
 
 // --- Top level parsing --- 
 
@@ -70,6 +78,10 @@ static int get_token() {
         if (IdentStr == "fn") return _FN;
         if (IdentStr == "import") return _IMPORT;
         if (IdentStr == "exit") return _EXIT;
+        if (IdentStr == "if") return _IF;
+        if (IdentStr == "elif") return _ELIF;
+        if (IdentStr == "else") return _ELSE;
+        if (IdentStr == "for") return _FOR;
         return _IDENT;
     }
     
@@ -154,7 +166,9 @@ static std::unique_ptr<Expression> parse_paren() {
     auto V = parse_expression();
     if(!V) return nullptr;
     // Parse Expression will return to here, and checks for close parenth
-    if (currToken != ')') return log_error("expected ')'");
+    if (currToken != ')') {
+        if (currToken != '}') return log_error("expected close");
+    }
     get_next_token();
     return V;
 }
@@ -195,6 +209,10 @@ static std::unique_ptr<Expression> parse_primary() {
             return parse_numexpr();
         case '(':
             return parse_paren();
+        case '{':
+            return parse_paren();
+        case _IF:
+            return parse_if();
     }
 }
 
@@ -279,6 +297,29 @@ static std::unique_ptr<FnExpression> parse_top_expr() {
     }
     return nullptr;
 }
+
+static std::unique_ptr<Expression> parse_if() {
+    // Consume "if"
+    get_next_token();
+    
+    // Condition
+    auto cond = parse_expression();
+    if (!cond) return nullptr; 
+
+    // Body
+    auto body = parse_expression();
+    if (!body) return nullptr;
+
+    // Else 
+    if (currToken != _ELSE) return log_error("Expected 'else'");
+    get_next_token();
+    auto xelse = parse_expression();
+    if (!xelse) return nullptr;
+    return llvm::make_unique<IfExpression>(std::move(cond), std::move(body), std::move(xelse));
+    
+    
+}
+
 
 static void handle_definition() {
     if(auto FnExpr = parse_definition()) {

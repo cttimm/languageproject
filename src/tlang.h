@@ -51,6 +51,8 @@ class OpExpression;
 class CallExpression;
 class ProtoFn;
 class FnExpression;
+class IfExpression;
+class ForExpression;
 
 
 // ---  Code Generation --- 
@@ -126,7 +128,7 @@ public:
 
 };
 
-class FnExpression{
+class FnExpression {
     std::unique_ptr<ProtoFn> Proto;
     std::unique_ptr<Expression> Body;
 public:
@@ -135,6 +137,18 @@ public:
            : Proto(std::move(Proto)), Body(std::move(Body)) {}
     
     llvm::Function *codegen();
+
+};
+
+class IfExpression : public Expression { 
+    std::unique_ptr<Expression> cond, body, xelse;
+public:
+    IfExpression(std::unique_ptr<Expression> cond, std::unique_ptr<Expression> body, std::unique_ptr<Expression> xelse)
+    : cond(std::move(cond)), body(std::move(body)), xelse(std::move(xelse)) {}
+    llvm::Value *codegen() override;
+};
+
+class ForExpression {
 
 };
 // -- End Nodes
@@ -264,6 +278,44 @@ llvm::Function *FnExpression::codegen() {
 
     function->eraseFromParent();
     return nullptr;
+}
+
+llvm::Value *IfExpression::codegen() {
+    llvm::Value *condv =  cond->codegen();
+    if(!condv) return nullptr;
+
+    condv = BUILDER.CreateFCmpONE(condv, llvm::ConstantFP::get(CONTEXT, llvm::APFloat(0.0)), "IFCOND");
+
+    llvm::Function *function = BUILDER.GetInsertBlock()->getParent();
+
+    llvm::BasicBlock *bodyblock = llvm::BasicBlock::Create(CONTEXT, "IFBODY", function);
+    llvm::BasicBlock *elseblock = llvm::BasicBlock::Create(CONTEXT, "ELSE");
+    llvm::BasicBlock *mergeblock = llvm::BasicBlock::Create(CONTEXT, "IFCONT");
+
+    BUILDER.CreateCondBr(condv, bodyblock, elseblock);
+    
+    // Body block
+    BUILDER.SetInsertPoint(bodyblock);
+    llvm::Value *bodyv = body->codegen();
+    if(!bodyv) return nullptr;
+    BUILDER.CreateBr(mergeblock);
+    bodyblock = BUILDER.GetInsertBlock();
+    
+    // Else block
+    function->getBasicBlockList().push_back(elseblock);
+    BUILDER.SetInsertPoint(elseblock);
+    llvm::Value *elsev = xelse->codegen();
+    if (!elsev) return nullptr;
+    BUILDER.CreateBr(mergeblock);
+    elseblock = BUILDER.GetInsertBlock();
+
+    // Merge block
+    function->getBasicBlockList().push_back(mergeblock);
+    BUILDER.SetInsertPoint(mergeblock);
+    llvm::PHINode *PN = BUILDER.CreatePHI(llvm::Type::getDoubleTy(CONTEXT), 2, "IFTMP");
+    PN->addIncoming(bodyv, bodyblock);
+    PN->addIncoming(elsev, elseblock);
+    return PN;
 }
 // End code gen
 
